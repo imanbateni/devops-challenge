@@ -44,7 +44,7 @@ Data Layer = PostgreSQL(Database) + HashiCorp-Vault(Secrets Manager)
 
   Clone the repository:
 
-    git clone <repository-url>
+    git clone https://github.com/imanbateni/devops-challenge.git
     cd devops-challenge
 
   Make scripts executable:
