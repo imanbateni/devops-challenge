@@ -1,0 +1,178 @@
+---
+- name: Initialize DevOps Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    vault_addr: "http://localhost:8200"
+    vault_token: "myroot"
+    db_user: "dbadmin"
+    db_password: "dbpassword123"
+    
+  tasks:
+    - name: Ensure Docker is running
+      command: docker info
+      register: docker_info
+      failed_when: docker_info.rc != 0
+      
+    - name: Start Vault and PostgreSQL
+      command: docker-compose up -d vault postgres
+      args:
+        chdir: "{{ playbook_dir }}/.."
+        
+    - name: Wait for Vault to be healthy
+      uri:
+        url: "{{ vault_addr }}/v1/sys/health"
+        method: GET
+        status_code: [200, 429, 472, 473, 501, 503]
+      register: vault_health
+      until: vault_health.status == 200
+      retries: 30
+      delay: 2
+      
+    - name: Enable KV v2 secrets engine
+      uri:
+        url: "{{ vault_addr }}/v1/sys/mounts/secret"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        body_format: json
+        body:
+          type: "kv"
+          options:
+            version: "2"
+        status_code: [200, 204, 400]
+        
+    - name: Store database credentials in Vault
+      uri:
+        url: "{{ vault_addr }}/v1/secret/data/database/postgres"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        body_format: json
+        body:
+          data:
+            username: "{{ db_user }}"
+            password: "{{ db_password }}"
+        status_code: [200, 204]
+        
+    - name: Create backend policy
+      uri:
+        url: "{{ vault_addr }}/v1/sys/policies/acl/backend-policy"
+        method: PUT
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        body_format: json
+        body:
+          policy: |
+            path "secret/data/database/postgres" {
+              capabilities = ["read"]
+            }
+            path "auth/approle/login" {
+              capabilities = ["create", "update"]
+            }
+        status_code: [200, 204]
+        
+    - name: Enable AppRole auth method
+      uri:
+        url: "{{ vault_addr }}/v1/sys/auth/approle"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        body_format: json
+        body:
+          type: "approle"
+        status_code: [200, 204, 400]
+        
+    - name: Create AppRole for backend
+      uri:
+        url: "{{ vault_addr }}/v1/auth/approle/role/backend"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        body_format: json
+        body:
+          token_policies: ["backend-policy"]
+          token_ttl: "1h"
+          token_max_ttl: "4h"
+          secret_id_ttl: 0
+          secret_id_num_uses: 0
+        status_code: [200, 204]
+        
+    - name: Get Role ID
+      uri:
+        url: "{{ vault_addr }}/v1/auth/approle/role/backend/role-id"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+      register: role_id_response
+      
+    - name: Generate Secret ID
+      uri:
+        url: "{{ vault_addr }}/v1/auth/approle/role/backend/secret-id"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+      register: secret_id_response
+      
+    - name: Save credentials to .env file
+      copy:
+        content: |
+          # Database credentials (for fallback)
+          DB_USER={{ db_user }}
+          DB_PASSWORD={{ db_password }}
+          
+          # Vault credentials
+          VAULT_ROLE_ID={{ role_id_response.json.data.role_id }}
+          VAULT_SECRET_ID={{ secret_id_response.json.data.secret_id }}
+        dest: "{{ playbook_dir }}/../.env"
+        
+    - name: Display credentials
+      debug:
+        msg:
+          - "Infrastructure initialized successfully!"
+          - "Role ID: {{ role_id_response.json.data.role_id }}"
+          - "Secret ID: {{ secret_id_response.json.data.secret_id }}"
+          - "Credentials saved to .env file"
+          
+    - name: Start all services
+      command: docker-compose up -d
+      args:
+        chdir: "{{ playbook_dir }}/.."
+        
+    - name: Wait for backend services to be healthy
+      pause:
+        seconds: 15
+        
+    - name: Test backend health endpoint
+      uri:
+        url: "http://0.0.0.0/api/health"
+        method: GET
+        status_code: 200
+      register: health_check
+      retries: 10
+      delay: 3
+      until: health_check.status == 200
+      
+    - name: Create test user
+      uri:
+        url: "http://0.0.0.0/api/users"
+        method: POST
+        body_format: json
+        body:
+          username: "testuser"
+          email: "test@example.com"
+        status_code: [201, 409]
+        
+    - name: Display completion message
+      debug:
+        msg:
+          - "====================================="
+          - "Infrastructure setup complete!"
+          - "====================================="
+          - "Access points:"
+          - "  - Get Users API: http://localhost/api/users"
+          - "  - healthCheck API: http://localhost/api/health"
+          - "  - Traefik: http://localhost:8080"
+          - "  - Vault: http://localhost:8200"
+          - "====================================="

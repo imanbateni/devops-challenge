@@ -1,0 +1,15 @@
+---
+- name: Destroy DevOps Infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Ensure Docker is running
+      command: docker info
+      register: docker_info
+      failed_when: docker_info.rc != 0
+          
+    - name: Stop all services
+      command: docker-compose down
+      args:
+        chdir: "{{ playbook_dir }}/.."
