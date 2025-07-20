@@ -47,7 +47,7 @@ SECRET_ID=$(vault write -field=secret_id -f auth/approle/role/backend/secret-id)
 echo "SECRET_ID: $SECRET_ID"
 
 # Save credentials to file for later use
-cat > /tmp/vault-creds.env <<EOF
+cat > /shared/vault-creds <<EOF
 VAULT_ROLE_ID=$ROLE_ID
 VAULT_SECRET_ID=$SECRET_ID
 EOF

@@ -55,11 +55,20 @@ services:
       VAULT_ROLE_ID: ${VAULT_ROLE_ID}
       VAULT_SECRET_ID: ${VAULT_SECRET_ID}
       NODE_ENV: production
+#    volumes:
+#      - vault-secrets:/shared
+#    command: |
+#      sh -c "
+#      export $(cat /shared/vault-creds | xargs)
+#      exec node dist/index.js
+#      "
     depends_on:
       postgres:
         condition: service_healthy
       vault:
         condition: service_healthy
+#      vault-init:
+#        condition: service_completed_successfully
     networks:
       - backend-net
     labels:
@@ -95,6 +104,8 @@ services:
         condition: service_healthy
       vault:
         condition: service_healthy
+#      vault-init:
+#        condition: service_completed_successfully
     networks:
       - backend-net
     labels:
@@ -137,9 +148,27 @@ services:
       retries: 3
     restart: unless-stopped
 
+#  # Vault initialization service
+#  vault-init:
+#    image: hashicorp/vault:1.20
+#    container_name: devops-vault-init
+#    depends_on:
+#      vault:
+#        condition: service_healthy
+#    environment:
+#      VAULT_ADDR: http://vault:8200
+#      VAULT_TOKEN: myroot
+#    volumes:
+#      - ./scripts/init-vault.sh:/init-vault.sh:ro
+#      - vault-secrets:/shared
+#    entrypoint: ["/bin/sh", "/init-vault.sh"]
+#    networks:
+#      - backend-net
+
 networks:
   backend-net:
     driver: bridge
 
 volumes:
   postgres_data:
+#  vault-secrets:

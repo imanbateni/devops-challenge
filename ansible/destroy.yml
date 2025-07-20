@@ -10,6 +10,6 @@
       failed_when: docker_info.rc != 0
           
     - name: Stop all services
-      command: docker-compose down
+      command: docker-compose down -v
       args:
         chdir: "{{ playbook_dir }}/.."

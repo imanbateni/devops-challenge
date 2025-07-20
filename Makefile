@@ -56,7 +56,9 @@ build:
 vault-creds:
 	@echo "Retrieving Vault credentials..."
 	@docker exec devops-vault sh -c 'vault read -field=role_id auth/approle/role/backend/role-id'
+	@echo ""
 	@docker exec devops-vault sh -c 'vault write -field=secret_id -f auth/approle/role/backend/secret-id'
+	@echo ""
 
 # Show service status
 status:
