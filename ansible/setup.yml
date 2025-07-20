@@ -114,29 +114,14 @@
         headers:
           X-Vault-Token: "{{ vault_token }}"
       register: secret_id_response
-      
-    - name: Save credentials to .env file
-      copy:
-        content: |
-          # Database credentials (for fallback)
-          DB_USER={{ db_user }}
-          DB_PASSWORD={{ db_password }}
-          
-          # Vault credentials
-          VAULT_ROLE_ID={{ role_id_response.json.data.role_id }}
-          VAULT_SECRET_ID={{ secret_id_response.json.data.secret_id }}
-        dest: "{{ playbook_dir }}/../.env"
-        
-    - name: Display credentials
-      debug:
-        msg:
-          - "Infrastructure initialized successfully!"
-          - "Role ID: {{ role_id_response.json.data.role_id }}"
-          - "Secret ID: {{ secret_id_response.json.data.secret_id }}"
-          - "Credentials saved to .env file"
           
     - name: Start all services
       command: docker-compose up -d
+      environment:
+        VAULT_ROLE_ID: "{{ role_id_response.json.data.role_id }}"
+        VAULT_SECRET_ID: "{{ secret_id_response.json.data.secret_id }}"
+        DB_USER: "{{ db_user }}"
+        DB_PASSWORD: "{{ db_password }}"
       args:
         chdir: "{{ playbook_dir }}/.."
         
